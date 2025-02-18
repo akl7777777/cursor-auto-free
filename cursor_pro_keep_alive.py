@@ -288,7 +288,7 @@ def sign_up_account(browser, tab):
     handle_turnstile(tab)
     wait_time = random.randint(3, 6)
     for i in range(wait_time):
-        logging.info(f"等待系统处理中... 剩余 {wait_time-i} 秒")
+        logging.info(f"等待系统处理中... 剩余 {wait_time - i} 秒")
         time.sleep(1)
 
     logging.info("正在获取账户信息...")
@@ -319,13 +319,13 @@ def sign_up_account(browser, tab):
 
 class EmailGenerator:
     def __init__(
-        self,
-        password="".join(
-            random.choices(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*",
-                k=12,
-            )
-        ),
+            self,
+            password="".join(
+                random.choices(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*",
+                    k=12,
+                )
+            ),
     ):
         configInstance = Config()
         configInstance.print_config()
@@ -403,7 +403,7 @@ def print_end_message():
 
 if __name__ == "__main__":
     print_logo()
-    greater_than_0_45 = check_cursor_version()
+    greater_than_0_45 = False
     browser_manager = None
     try:
         logging.info("\n=== 初始化程序 ===")
@@ -413,11 +413,12 @@ if __name__ == "__main__":
         print("\n请选择操作模式:")
         print("1. 仅重置机器码")
         print("2. 完整注册流程")
+        print("3. 仅注册账号(电脑没有安装cursor可以选择此项)")
 
         while True:
             try:
-                choice = int(input("请输入选项 (1 或 2): ").strip())
-                if choice in [1, 2]:
+                choice = int(input("请输入选项 (1 或 2 或 3): ").strip())
+                if choice in [1, 2, 3]:
                     break
                 else:
                     print("无效的选项,请重新输入")
@@ -425,12 +426,15 @@ if __name__ == "__main__":
                 print("请输入有效的数字")
 
         if choice == 1:
+            greater_than_0_45 = check_cursor_version()
             # 仅执行重置机器码
             reset_machine_id(greater_than_0_45)
             logging.info("机器码重置完成")
             print_end_message()
             sys.exit(0)
-
+        if choice == 2:
+            # 执行完整注册流程
+            greater_than_0_45 = check_cursor_version()
         logging.info("正在初始化浏览器...")
 
         # 获取user_agent
@@ -488,6 +492,9 @@ if __name__ == "__main__":
                 logging.info(
                     "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
                 )
+                if choice == 3:
+                    logging.info("仅注册账号流程已完成")
+                    sys.exit(0)
                 logging.info("重置机器码...")
                 reset_machine_id(greater_than_0_45)
                 logging.info("所有操作已完成")
