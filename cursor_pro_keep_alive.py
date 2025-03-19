@@ -330,23 +330,24 @@ class EmailGenerator:
         configInstance = Config()
         configInstance.print_config()
         self.domain = configInstance.get_domain()
+        self.names = self.load_names()
         self.default_password = password
         self.default_first_name = self.generate_random_name()
         self.default_last_name = self.generate_random_name()
 
-    def generate_random_name(self, length=6):
-        """生成随机用户名"""
-        first_letter = random.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        rest_letters = "".join(
-            random.choices("abcdefghijklmnopqrstuvwxyz", k=length - 1)
-        )
-        return first_letter + rest_letters
+    def load_names(self):
+        with open("names-dataset.txt", "r") as file:
+            return file.read().split()
 
-    def generate_email(self, length=8):
+    def generate_random_name(self):
+        """生成随机用户名"""
+        return random.choice(self.names)
+
+    def generate_email(self, length=4):
         """生成随机邮箱地址"""
-        random_str = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=length))
-        timestamp = str(int(time.time()))[-6:]  # 使用时间戳后6位
-        return f"{random_str}{timestamp}@{self.domain}"
+        length = random.randint(0, length)  # 生成0到length之间的随机整数
+        timestamp = str(int(time.time()))[-length:]  # 使用时间戳后length位
+        return f"{self.default_first_name}{timestamp}@{self.domain}"  #
 
     def get_account_info(self):
         """获取完整的账号信息"""
@@ -393,8 +394,8 @@ def print_end_message():
     logging.info("=" * 30)
     logging.info("所有操作已完成")
     logging.info("\n=== 获取更多信息 ===")
-    logging.info("🔥 QQ交流群: 576045098")
     logging.info("📺 B站UP主: 想回家的前端")
+    logging.info("🔥 公众号: code 未来")
     logging.info("=" * 30)
     logging.info(
         "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
@@ -452,8 +453,6 @@ if __name__ == "__main__":
         # 获取并打印浏览器的user-agent
         user_agent = browser.latest_tab.run_js("return navigator.userAgent")
 
-        logging.info("正在初始化邮箱验证模块...")
-        email_handler = EmailVerificationHandler()
         logging.info(
             "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
         )
@@ -464,13 +463,18 @@ if __name__ == "__main__":
         mail_url = "https://tempmail.plus"
 
         logging.info("正在生成随机账号信息...")
+
         email_generator = EmailGenerator()
-        account = email_generator.generate_email()
-        password = email_generator.default_password
         first_name = email_generator.default_first_name
         last_name = email_generator.default_last_name
+        account = email_generator.generate_email()
+        password = email_generator.default_password
 
         logging.info(f"生成的邮箱账号: {account}")
+
+        logging.info("正在初始化邮箱验证模块...")
+        email_handler = EmailVerificationHandler(account)
+
         auto_update_cursor_auth = True
 
         tab = browser.latest_tab

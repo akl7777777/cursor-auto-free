@@ -21,10 +21,14 @@ class BrowserManager:
         """获取浏览器配置"""
         co = ChromiumOptions()
         try:
-            extension_path = self._get_extension_path()
+            extension_path = self._get_extension_path("turnstilePatch")
             co.add_extension(extension_path)
         except FileNotFoundError as e:
             logging.warning(f"警告: {e}")
+
+        browser_path = os.getenv("BROWSER_PATH")
+        if browser_path:
+            co.set_paths(browser_path=browser_path)
 
         co.set_pref("credentials_enable_service", False)
         co.set_argument("--hide-crash-restore-bubble")
@@ -47,13 +51,13 @@ class BrowserManager:
 
         return co
 
-    def _get_extension_path(self):
+    def _get_extension_path(self,exname='turnstilePatch'):
         """获取插件路径"""
         root_dir = os.getcwd()
-        extension_path = os.path.join(root_dir, "turnstilePatch")
+        extension_path = os.path.join(root_dir, exname)
 
         if hasattr(sys, "_MEIPASS"):
-            extension_path = os.path.join(sys._MEIPASS, "turnstilePatch")
+            extension_path = os.path.join(sys._MEIPASS, exname)
 
         if not os.path.exists(extension_path):
             raise FileNotFoundError(f"插件不存在: {extension_path}")

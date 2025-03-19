@@ -49,7 +49,7 @@ def get_cursor_paths() -> Tuple[str, str]:
         },
         "Windows": {
             "base": os.path.join(
-                os.getenv("LOCALAPPDATA", ""), "Programs", "Cursor", "resources", "app"
+                os.getenv("USERAPPPATH") or os.path.join(os.getenv("LOCALAPPDATA", ""), "Programs", "Cursor", "resources", "app")
             ),
             "package": "package.json",
             "main": "out/main.js",
@@ -72,6 +72,14 @@ def get_cursor_paths() -> Tuple[str, str]:
         raise OSError("在 Linux 系统上未找到 Cursor 安装路径")
 
     base_path = paths_map[system]["base"]
+    # 判断Windows是否存在这个文件夹,如果不存在,提示需要创建软连接后重试
+    if system  == "Windows":
+        if not os.path.exists(base_path):
+            logging.info('可能您的Cursor不是默认安装路径,请创建软连接,命令如下:')
+            logging.info('cmd /c mklink /d "C:\\Users\\<username>\\AppData\\Local\\Programs\\Cursor" "默认安装路径"')
+            logging.info('例如:')
+            logging.info('cmd /c mklink /d "C:\\Users\\<username>\\AppData\\Local\\Programs\\Cursor" "D:\\SoftWare\\cursor"')
+            input("\n程序执行完毕，按回车键退出...")
     return (
         os.path.join(base_path, paths_map[system]["package"]),
         os.path.join(base_path, paths_map[system]["main"]),
