@@ -31,9 +31,9 @@ EMOJI = {"ERROR": "❌", "WARNING": "⚠️", "INFO": "ℹ️"}
 
 class VerificationStatus(Enum):
     """验证状态枚举"""
-
     PASSWORD_PAGE = "@name=password"
     CAPTCHA_PAGE = "@data-index=0"
+    SIGH_UP = "Sign up"
     ACCOUNT_SETTINGS = "Account Settings"
 
 
@@ -140,6 +140,33 @@ def handle_turnstile(tab, max_retries: int = 2, retry_interval: tuple = (1, 2)) 
 
             except Exception as e:
                 logging.debug(f"当前尝试未成功: {str(e)}")
+                try:
+                    # 定位验证框元素
+                    challenge_check_full = (
+                        tab.ele("@id=DPxlC8", timeout=2)
+                        .child().child()
+                        .shadow_root.ele("tag:iframe")
+                        .ele("tag:body")
+                        .sr("tag:input")
+                    )
+                    if challenge_check_full:
+                        logging.info("检测到 Turnstile 验证框，开始处理...")
+                        # 随机延时后点击验证
+                        time.sleep(random.uniform(1, 3))
+                        challenge_check_full.click()
+                        time.sleep(2)
+
+                        # 保存验证后的截图
+                        save_screenshot(tab, "clicked")
+
+                        # 检查验证结果
+                        if check_verification_success(tab):
+                            logging.info("Turnstile 验证通过")
+                            save_screenshot(tab, "success")
+                            return True
+                except Exception as e:
+                    logging.debug(f"catch内当前尝试未成功: {str(e)}")
+
 
             # 检查是否已经验证成功
             if check_verification_success(tab):
@@ -150,9 +177,6 @@ def handle_turnstile(tab, max_retries: int = 2, retry_interval: tuple = (1, 2)) 
 
         # 超出最大重试次数
         logging.error(f"验证失败 - 已达到最大重试次数 {max_retries}")
-        logging.error(
-            "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
-        )
         save_screenshot(tab, "failed")
         return False
 
@@ -216,7 +240,7 @@ def sign_up_account(browser, tab):
     logging.info("=== 开始注册账号流程 ===")
     logging.info(f"正在访问注册页面: {sign_up_url}")
     tab.get(sign_up_url)
-
+    handle_turnstile(tab)
     try:
         if tab.ele("@name=first_name"):
             logging.info("正在填写个人信息...")
