@@ -393,14 +393,6 @@ def print_end_message():
     logging.info("\n\n\n\n\n")
     logging.info("=" * 30)
     logging.info("所有操作已完成")
-    logging.info("\n=== 获取更多信息 ===")
-    logging.info("📺 B站UP主: 想回家的前端")
-    logging.info("🔥 公众号: code 未来")
-    logging.info("=" * 30)
-    logging.info(
-        "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
-    )
-
 
 if __name__ == "__main__":
     print_logo()
@@ -492,9 +484,6 @@ if __name__ == "__main__":
                 logging.info("更新认证信息...")
                 update_cursor_auth(
                     email=account, access_token=token, refresh_token=token
-                )
-                logging.info(
-                    "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
                 )
                 if choice == 3:
                     logging.info("仅注册账号流程已完成")
