@@ -11,41 +11,11 @@ class BrowserManager:
     def __init__(self):
         self.browser = None
 
-    def init_browser(self, user_agent=None, user_data_dir=None):
-        """
-        初始化浏览器
-        
-        Args:
-            user_agent: 用户代理字符串
-            user_data_dir: 浏览器用户数据目录，用于隔离不同的浏览器实例
-            
-        Returns:
-            Browser: 浏览器实例
-        """
-        # 使用 ChromiumOptions 来配置浏览器
-        co = ChromiumOptions()
-        
-        # 设置无头模式
-        co.headless(True)
-        
-        # 设置其他选项
-        co.set_argument("--ignore-certificate-errors")
-        co.set_argument("--no-sandbox")
-        co.set_argument("--disable-gpu")
-        co.set_argument("--window-size=1920,1080")
-        
-        # 设置用户代理
-        if user_agent:
-            co.set_user_agent(user_agent)
-        
-        # 设置用户数据目录 - 使用正确的参数名
-        if user_data_dir:
-            co.set_paths(user_data_path=user_data_dir)
-        
-        # 创建浏览器实例
-        browser = Chromium(co)
-        self.browser = browser
-        return browser
+    def init_browser(self, user_agent=None):
+        """初始化浏览器"""
+        co = self._get_browser_options(user_agent)
+        self.browser = Chromium(co)
+        return self.browser
 
     def _get_browser_options(self, user_agent=None):
         """获取浏览器配置"""
