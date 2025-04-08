@@ -205,7 +205,7 @@ def get_cursor_session_token(tab, max_attempts=3, retry_interval=2):
                 if cookie.get("name") == "WorkosCursorSessionToken":
                     # 打印WorkosCursorSessionToken
                     logging.info(f"获取到WorkosCursorSessionToken: {cookie['value']}")
-                    return cookie["value"].split("%3A%3A")[1]
+                    return cookie["value"].split("%3A%3A")[1],cookie['value']  # 返回完整的token值，不再分割
 
             attempts += 1
             if attempts < max_attempts:
@@ -240,7 +240,10 @@ def sign_up_account(browser, tab):
     logging.info("=== 开始注册账号流程 ===")
     logging.info(f"正在访问注册页面: {sign_up_url}")
     tab.get(sign_up_url)
-    handle_turnstile(tab)
+    if not handle_turnstile(tab):
+        logging.error("Turnstile 验证失败，无法继续注册流程")
+        save_screenshot(tab, "turnstile_failed")
+        return False
     try:
         if tab.ele("@name=first_name"):
             logging.info("正在填写个人信息...")
@@ -263,8 +266,10 @@ def sign_up_account(browser, tab):
         logging.error(f"注册页面访问失败: {str(e)}")
         return False
 
-    handle_turnstile(tab)
-
+    if not handle_turnstile(tab):
+        logging.error("Turnstile 验证失败，无法继续注册流程")
+        save_screenshot(tab, "turnstile_failed_after_personal_info")
+        return False
     try:
         if tab.ele("@name=password"):
             logging.info("正在设置密码...")
@@ -283,7 +288,10 @@ def sign_up_account(browser, tab):
         logging.error("注册失败：邮箱已被使用")
         return False
 
-    handle_turnstile(tab)
+    if not handle_turnstile(tab):
+        logging.error("Turnstile 验证失败，无法继续注册流程")
+        save_screenshot(tab, "turnstile_failed_after_password")
+        return False
 
     while True:
         try:
@@ -309,7 +317,11 @@ def sign_up_account(browser, tab):
         except Exception as e:
             logging.error(f"验证码处理过程出错: {str(e)}")
 
-    handle_turnstile(tab)
+    if not handle_turnstile(tab):
+        logging.error("Turnstile 验证失败，无法继续注册流程")
+        save_screenshot(tab, "turnstile_failed_after_verification_code")
+        return False
+
     wait_time = random.randint(3, 6)
     for i in range(wait_time):
         logging.info(f"等待系统处理中... 剩余 {wait_time - i} 秒")
@@ -418,24 +430,247 @@ def print_end_message():
     logging.info("=" * 30)
     logging.info("所有操作已完成")
 
+
+def batch_register_account(user_agent, account_info, output_file, index, total):
+    """
+    单个账号注册流程，用于并行处理
+    """
+    try:
+        # 导入必要的模块
+        import os
+        import time
+        import random
+        import logging
+        from browser_utils import BrowserManager
+        from get_email_code import EmailVerificationHandler
+        
+        # 添加随机延迟，避免所有进程同时启动
+        start_delay = random.uniform(1, 5)
+        time.sleep(start_delay)
+        
+        logging.info(f"\n=== 正在注册第 {index+1}/{total} 个账号 ===")
+        
+        # 为每个浏览器实例创建唯一的用户数据目录
+        user_data_dir = f"browser_data_{index}_{int(time.time())}"
+        
+        # 初始化浏览器，传入唯一的用户数据目录
+        browser_manager = BrowserManager()
+        browser = browser_manager.init_browser(user_agent, user_data_dir=user_data_dir)
+        
+        # 增加页面加载超时时间
+        browser.set_timeouts(page_load=60000)  # 60秒
+        
+        # 获取账号信息
+        first_name = account_info["first_name"]
+        last_name = account_info["last_name"]
+        account = account_info["email"]
+        password = account_info["password"]
+        
+        logging.info(f"处理账号: {account}")
+        
+        # 初始化邮箱验证模块
+        email_handler = EmailVerificationHandler(account)
+        
+        tab = browser.latest_tab
+        tab.run_js("try { turnstile.reset() } catch(e) { }")
+        
+        # 定义URL（在子进程中需要重新定义）
+        login_url = "https://authenticator.cursor.sh"
+        sign_up_url = "https://authenticator.cursor.sh/sign-up"
+        settings_url = "https://www.cursor.com/settings"
+        
+        # 在关键操作前增加稳定性检查
+        def ensure_page_stable(tab, timeout=10):
+            """确保页面稳定后再操作"""
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    # 检查页面是否响应
+                    tab.run_js("return document.readyState")
+                    return True
+                except Exception:
+                    time.sleep(0.5)
+            return False
+        
+        # 在关键操作前调用
+        # 例如在访问注册页面后
+        tab.get(sign_up_url)
+        if not ensure_page_stable(tab):
+            logging.error("页面加载不稳定，放弃当前注册")
+            return False
+            
+        # 增加重试机制
+        max_retries = 3
+        for retry in range(max_retries):
+            try:
+                # 注册账号
+                success = False
+                try:
+                    # 访问注册页面
+                    logging.info(f"正在访问注册页面: {sign_up_url}")
+                    tab.get(sign_up_url)
+                    
+                    # 导入handle_turnstile函数
+                    from cursor_pro_keep_alive import handle_turnstile, save_screenshot, get_cursor_session_token
+                    
+                    if not handle_turnstile(tab):
+                        logging.error("Turnstile 验证失败，无法继续注册流程")
+                        save_screenshot(tab, "turnstile_failed")
+                        return False
+                        
+                    try:
+                        if tab.ele("@name=first_name"):
+                            logging.info("正在填写个人信息...")
+                            tab.actions.click("@name=first_name").input(first_name)
+                            logging.info(f"已输入名字: {first_name}")
+                            time.sleep(random.uniform(1, 3))
+
+                            tab.actions.click("@name=last_name").input(last_name)
+                            logging.info(f"已输入姓氏: {last_name}")
+                            time.sleep(random.uniform(1, 3))
+
+                            tab.actions.click("@name=email").input(account)
+                            logging.info(f"已输入邮箱: {account}")
+                            time.sleep(random.uniform(1, 3))
+
+                            logging.info("提交个人信息...")
+                            tab.actions.click("@type=submit")
+
+                    except Exception as e:
+                        logging.error(f"注册页面访问失败: {str(e)}")
+                        return False
+
+                    if not handle_turnstile(tab):
+                        logging.error("Turnstile 验证失败，无法继续注册流程")
+                        save_screenshot(tab, "turnstile_failed_after_personal_info")
+                        return False
+                        
+                    try:
+                        if tab.ele("@name=password"):
+                            logging.info("正在设置密码...")
+                            tab.ele("@name=password").input(password)
+                            time.sleep(random.uniform(1, 3))
+
+                            logging.info("提交密码...")
+                            tab.ele("@type=submit").click()
+                            logging.info("密码设置完成，等待系统响应...")
+
+                    except Exception as e:
+                        logging.error(f"密码设置失败: {str(e)}")
+                        return False
+
+                    if tab.ele("This email is not available."):
+                        logging.error("注册失败：邮箱已被使用")
+                        return False
+
+                    if not handle_turnstile(tab):
+                        logging.error("Turnstile 验证失败，无法继续注册流程")
+                        save_screenshot(tab, "turnstile_failed_after_password")
+                        return False
+
+                    while True:
+                        try:
+                            if tab.ele("Account Settings"):
+                                logging.info("注册成功 - 已进入账户设置页面")
+                                break
+                            if tab.ele("@data-index=0"):
+                                logging.info("正在获取邮箱验证码...")
+                                code = email_handler.get_verification_code()
+                                if not code:
+                                    logging.error("获取验证码失败")
+                                    return False
+
+                                logging.info(f"成功获取验证码: {code}")
+                                logging.info("正在输入验证码...")
+                                i = 0
+                                for digit in code:
+                                    tab.ele(f"@data-index={i}").input(digit)
+                                    time.sleep(random.uniform(0.1, 0.3))
+                                    i += 1
+                                logging.info("验证码输入完成")
+                                break
+                        except Exception as e:
+                            logging.error(f"验证码处理过程出错: {str(e)}")
+
+                    if not handle_turnstile(tab):
+                        logging.error("Turnstile 验证失败，无法继续注册流程")
+                        save_screenshot(tab, "turnstile_failed_after_verification_code")
+                        return False
+
+                    wait_time = random.randint(3, 6)
+                    for i in range(wait_time):
+                        logging.info(f"等待系统处理中... 剩余 {wait_time - i} 秒")
+                        time.sleep(1)
+
+                    logging.info("正在获取账户信息...")
+                    tab.get(settings_url)
+                    
+                    result = get_cursor_session_token(tab)
+                    if result is not None:
+                        token, workosCursorSessionToken = result
+                        # 保存账号信息到文件
+                        with open(output_file, "a", encoding="utf-8") as f:
+                            f.write(f"{account},{password},{workosCursorSessionToken}\n")
+                        logging.info(f"账号 {account} 注册成功并已保存")
+                        success = True
+                    else:
+                        logging.error(f"账号 {account} 获取会话令牌失败")
+                        
+                except Exception as e:
+                    logging.error(f"注册过程出错: {str(e)}")
+                
+                # 关闭浏览器
+                browser_manager.quit()
+                return success
+                
+            except Exception as e:
+                if retry < max_retries - 1:
+                    logging.warning(f"操作失败，正在重试 ({retry+1}/{max_retries}): {str(e)}")
+                    time.sleep(random.uniform(2, 5))
+                else:
+                    logging.error(f"操作失败，已达到最大重试次数: {str(e)}")
+                    return False
+        
+    except Exception as e:
+        logging.error(f"注册第 {index+1} 个账号时出错: {str(e)}")
+        return False
+    finally:
+        # 确保浏览器被关闭
+        try:
+            if browser_manager:
+                browser_manager.quit()
+            
+            # 清理用户数据目录
+            import shutil
+            if os.path.exists(user_data_dir):
+                shutil.rmtree(user_data_dir, ignore_errors=True)
+        except:
+            pass
+
+
 if __name__ == "__main__":
     print_logo()
     greater_than_0_45 = False
     browser_manager = None
     try:
         logging.info("\n=== 初始化程序 ===")
-        ExitCursor()
-
         # 提示用户选择操作模式
         print("\n请选择操作模式:")
         print("1. 仅重置机器码")
         print("2. 完整注册流程")
         print("3. 仅注册账号(电脑没有安装cursor可以选择此项)")
+        print("4. 批量注册账号")
 
         while True:
             try:
-                choice = int(input("请输入选项 (1 或 2 或 3): ").strip())
-                if choice in [1, 2, 3]:
+                choice = int(input("请输入选项 (1 或 2 或 3 或 4): ").strip())
+                if choice in [1, 2, 3, 4]:
+                    # 如果是1,2则ExitCursor()
+                    if choice == 1:
+                        ExitCursor()
+                    elif choice == 2:
+                        # 执行完整注册流程
+                        ExitCursor()
                     break
                 else:
                     print("无效的选项,请重新输入")
@@ -469,9 +704,6 @@ if __name__ == "__main__":
         # 获取并打印浏览器的user-agent
         user_agent = browser.latest_tab.run_js("return navigator.userAgent")
 
-        logging.info(
-            "请前往开源项目查看更多信息：https://github.com/chengazhen/cursor-auto-free"
-        )
         logging.info("\n=== 配置信息 ===")
         login_url = "https://authenticator.cursor.sh"
         sign_up_url = "https://authenticator.cursor.sh/sign-up"
@@ -501,9 +733,131 @@ if __name__ == "__main__":
         logging.info(f"正在访问登录页面: {login_url}")
         tab.get(login_url)
 
+        if choice == 4:
+            while True:
+                try:
+                    num_accounts = int(input("请输入要注册的账号数量: ").strip())
+                    if num_accounts > 0:
+                        break
+                    else:
+                        print("请输入大于0的数字")
+                except ValueError:
+                    print("请输入有效的数字")
+            
+            while True:
+                try:
+                    concurrent_browsers = int(input("请输入并行浏览器数量(建议1-3，输入1使用单线程模式): ").strip())
+                    if concurrent_browsers > 0:
+                        # 限制最大并行数量，避免资源过度占用
+                        if concurrent_browsers > 5:
+                            print("警告: 并行数量过大可能导致系统资源不足，建议设置为1-3")
+                            if input("是否继续? (y/n): ").lower() != 'y':
+                                continue
+                        break
+                    else:
+                        print("请输入大于0的数字")
+                except ValueError:
+                    print("请输入有效的数字")
+            
+            # 创建输出文件
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"cursor_accounts_{timestamp}.txt"
+            
+            # 写入标题行
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write("邮箱,密码,WorkosCursorSessionToken\n")
+            
+            # 准备账号信息
+            account_infos = []
+            for _ in range(num_accounts):
+                email_generator = EmailGenerator()
+                account_infos.append(email_generator.get_account_info())
+            
+            # 判断是否使用单线程模式
+            if concurrent_browsers == 1:
+                logging.info(f"使用单线程模式注册 {num_accounts} 个账号，结果将保存到 {output_file}")
+                
+                # 单线程逻辑
+                successful_count = 0
+                for i, account_info in enumerate(account_infos):
+                    try:
+                        # 初始化浏览器
+                        browser_manager = BrowserManager()
+                        browser = browser_manager.init_browser(user_agent)
+                        
+                        # 获取账号信息
+                        first_name = account_info["first_name"]
+                        last_name = account_info["last_name"]
+                        account = account_info["email"]
+                        password = account_info["password"]
+                        
+                        logging.info(f"\n=== 正在注册第 {i+1}/{num_accounts} 个账号 ===")
+                        logging.info(f"处理账号: {account}")
+                        
+                        # 初始化邮箱验证模块
+                        email_handler = EmailVerificationHandler(account)
+                        
+                        tab = browser.latest_tab
+                        tab.run_js("try { turnstile.reset() } catch(e) { }")
+                        
+                        # 注册账号
+                        if sign_up_account(browser, tab):
+                            token, workosCursorSessionToken = get_cursor_session_token(tab)
+                            if token:
+                                # 保存账号信息到文件
+                                with open(output_file, "a", encoding="utf-8") as f:
+                                    f.write(f"{account},{password},{workosCursorSessionToken}\n")
+                                logging.info(f"账号 {account} 注册成功并已保存")
+                                successful_count += 1
+                            else:
+                                logging.error(f"账号 {account} 获取会话令牌失败")
+                        
+                    except Exception as e:
+                        logging.error(f"注册第 {i+1} 个账号时出错: {str(e)}")
+                    finally:
+                        # 确保浏览器被关闭
+                        try:
+                            if browser_manager:
+                                browser_manager.quit()
+                        except:
+                            pass
+                        
+                        # 添加间隔，避免频繁请求
+                        time.sleep(random.uniform(2, 5))
+            else:
+                # 多线程逻辑
+                logging.info(f"使用 {concurrent_browsers} 个并行浏览器注册 {num_accounts} 个账号，结果将保存到 {output_file}")
+                
+                # 使用多进程并行处理
+                from multiprocessing import Pool
+                
+                successful_count = 0
+                with Pool(processes=concurrent_browsers) as pool:
+                    # 提交所有任务
+                    results = []
+                    for i, account_info in enumerate(account_infos):
+                        result = pool.apply_async(
+                            batch_register_account, 
+                            (user_agent, account_info, output_file, i, num_accounts)
+                        )
+                        results.append(result)
+                    
+                    # 处理结果
+                    for result in results:
+                        try:
+                            if result.get():  # 等待任务完成并获取结果
+                                successful_count += 1
+                        except Exception as e:
+                            logging.error(f"处理任务时出错: {str(e)}")
+            
+            logging.info(f"\n批量注册完成，共注册 {num_accounts} 个账号，成功 {successful_count} 个")
+            logging.info(f"账号信息已保存到文件: {output_file}")
+            print_end_message()
+            sys.exit(0)
+
         if sign_up_account(browser, tab):
             logging.info("正在获取会话令牌...")
-            token = get_cursor_session_token(tab)
+            token,workosCursorSessionToken = get_cursor_session_token(tab)
             if token:
                 logging.info("更新认证信息...")
                 update_cursor_auth(
